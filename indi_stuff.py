@@ -4,27 +4,11 @@ import PyIndi
 from PyIndi import INumberVectorProperty
 import numpy as np
 import cv2 as cv
-import multiprocessing
+from utils import FPS
 import collections
-import queue
-import threading
-import subprocess as sp
 
 # logging.basicConfig(filename='logfile.log', level=logging.DEBUG)
-logging.basicConfig(level=logging.DEBUG)
-
-
-class FPS:
-    def __init__(self, avarageof=50):
-        self.frame_timestamps = collections.deque(maxlen=avarageof)
-
-    def count(self):
-        self.frame_timestamps.append(time.time())
-        q_len = len(self.frame_timestamps)
-        if q_len > 1:
-            return q_len / (self.frame_timestamps[-1] - self.frame_timestamps[0])
-        else:
-            return 0.0
+logging.basicConfig(level=logging.INFO)
 
 
 class Device(PyIndi.BaseDevice):
@@ -43,22 +27,8 @@ class Device(PyIndi.BaseDevice):
         return property_value
 
 
-def save_img(bp, ctr, fps, p):
-    img = np.array(bp.getblobdata()).reshape((976, 1304))
-    img = cv.cvtColor(img, cv.COLOR_BAYER_BG2BGR)
-
-    # img = Image.fromarray(img)
-    # cv.imshow("image", cv.cvtColor(img, cv.COLOR_BAYER_BG2BGR))
-    # cv.waitKey(1)
-
-    p.stdin.write(img.tostring())
-
-    # img = Image.fromarray(cv.cvtColor(img, cv.COLOR_BAYER_BG2BGR))
-    # img.save(f'frames/frame{ctr}.png')
-
-
 class IndiClient(PyIndi.BaseClient):
-    def __init__(self, host_adr='localhost', port=7624):
+    def __init__(self, config, host_adr='localhost', port=7624):
         super(IndiClient, self).__init__()
         self.logger = logging.getLogger('IndiClient')
         self.logger.info('creating an instance of IndiClient')
@@ -67,35 +37,16 @@ class IndiClient(PyIndi.BaseClient):
         self.connectServer()
 
         self.cam = None
-        self._gain = 200
-        self._exp = 0.04
+        self._gain = int(config['capture']['gain'])
+        self._exp = float(config['capture']['exposure'])
+
         self.img_ctr = 0
+        self._img_w = int(config['capture']['size_w'])
+        self._img_h = int(config['capture']['size_h'])
 
-        self.fps = FPS()
+        self.fps = FPS(30)
 
-        self.frame_queue = queue.Queue()
-        self.rtmpUrl = ""
-
-        self.command = ['ffmpeg',
-                        '-y',
-
-                        '-f', 'rawvideo',
-                        '-vcodec', 'rawvideo',
-                        '-pix_fmt', 'bgr24',
-                        '-s', "{}x{}".format(1304, 976),
-                        '-r', '24',
-                        '-i', '-',
-
-                        '-c:v', 'libx264',
-                        '-b:v', '1500k',
-                        '-pix_fmt', 'yuv420p',
-                        '-preset', 'ultrafast',
-                        # '-g', '20',
-                        '-threads', '0',
-                        '-bufsize', '1024k',
-                        '-f', 'flv',
-                        self.rtmpUrl]
-        self.p = sp.Popen(self.command, stdin=sp.PIPE)
+        self.newFrameCB = None
 
     def getDevice(self, device_name) -> Device:
         device = super().getDevice(device_name)
@@ -118,12 +69,13 @@ class IndiClient(PyIndi.BaseClient):
         pass
 
     def newBLOB(self, bp):
+        self.logger.debug(f"img count {self.img_ctr}")
         self.img_ctr += 1
-        self.logger.info(f"img count {self.img_ctr}")
-        print(self.fps.count())
 
-        save_img(bp, self.img_ctr, self.fps, self.p)
-        # multiprocessing.Process(target=save_img, args=(bp, self.img_ctr, self.fps, )).start()
+        self.fps.count()
+        img = np.array(bp.getblobdata()).reshape((self._img_h, self._img_w))
+        if self.newFrameCB:
+            self.newFrameCB(img)
 
     def newSwitch(self, svp):
         self.logger.info(f"new Switch {svp.name} for device {svp.device}")
@@ -131,8 +83,6 @@ class IndiClient(PyIndi.BaseClient):
     def newNumber(self, nvp):
         if 'CCD' in nvp.name:
             self.logger.info(f"{nvp.name} on {nvp.device} is now {[vp.value for vp in nvp]}")
-        if nvp.name == 'CCD_EXPOSURE' and nvp[0].value == 0:
-            self.take_exposure()
 
     def newText(self, tvp):
         self.logger.info(f"new Text {tvp.name} for device {tvp.device}")
@@ -151,14 +101,16 @@ class IndiClient(PyIndi.BaseClient):
 
     # =====================
     # Camera
-    def set_gain(self, gain: float):
-        self._gain = gain
+    def set_gain(self, gain: float = None):
+        if gain is not None:
+            self._gain = gain
         controls = self.cam.getNumber('CCD_CONTROLS')
         controls[0].value = self._gain
         self.sendNewNumber(controls)
 
-    def set_exp(self, exp: float):
-        self._exp = exp
+    def set_exp(self, exp: float = None):
+        if exp is not None:
+            self._exp = exp
         exp = self.cam.getNumber("STREAMING_EXPOSURE")
         exp[0].value = self._exp
         self.sendNewNumber(exp)
@@ -168,11 +120,11 @@ class IndiClient(PyIndi.BaseClient):
         stream[0].s = PyIndi.ISS_ON
         stream[1].s = PyIndi.ISS_OFF
         self.sendNewSwitch(stream)
-        print("=======start streaming=============")
+        self.logger.info("=======start streaming=============")
 
     def stop_streaming(self):
         stream = self.cam.getSwitch("CCD_VIDEO_STREAM")
         stream[0].s = PyIndi.ISS_OFF
         stream[1].s = PyIndi.ISS_ON
         self.sendNewSwitch(stream)
-        print("=======stop streaming=============")
+        self.logger.info("=======stop streaming=============")
