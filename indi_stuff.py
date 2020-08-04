@@ -1,15 +1,30 @@
 import logging
-import sys
 import time
-import io
 import PyIndi
 from PyIndi import INumberVectorProperty
-import PIL.Image as Image
 import numpy as np
 import cv2 as cv
+import multiprocessing
+import collections
+import queue
+import threading
+import subprocess as sp
 
 # logging.basicConfig(filename='logfile.log', level=logging.DEBUG)
 logging.basicConfig(level=logging.DEBUG)
+
+
+class FPS:
+    def __init__(self, avarageof=50):
+        self.frame_timestamps = collections.deque(maxlen=avarageof)
+
+    def count(self):
+        self.frame_timestamps.append(time.time())
+        q_len = len(self.frame_timestamps)
+        if q_len > 1:
+            return q_len / (self.frame_timestamps[-1] - self.frame_timestamps[0])
+        else:
+            return 0.0
 
 
 class Device(PyIndi.BaseDevice):
@@ -28,6 +43,20 @@ class Device(PyIndi.BaseDevice):
         return property_value
 
 
+def save_img(bp, ctr, fps, p):
+    img = np.array(bp.getblobdata()).reshape((976, 1304))
+    img = cv.cvtColor(img, cv.COLOR_BAYER_BG2BGR)
+
+    # img = Image.fromarray(img)
+    # cv.imshow("image", cv.cvtColor(img, cv.COLOR_BAYER_BG2BGR))
+    # cv.waitKey(1)
+
+    p.stdin.write(img.tostring())
+
+    # img = Image.fromarray(cv.cvtColor(img, cv.COLOR_BAYER_BG2BGR))
+    # img.save(f'frames/frame{ctr}.png')
+
+
 class IndiClient(PyIndi.BaseClient):
     def __init__(self, host_adr='localhost', port=7624):
         super(IndiClient, self).__init__()
@@ -42,7 +71,31 @@ class IndiClient(PyIndi.BaseClient):
         self._exp = 0.04
         self.img_ctr = 0
 
-        self.test = None
+        self.fps = FPS()
+
+        self.frame_queue = queue.Queue()
+        self.rtmpUrl = ""
+
+        self.command = ['ffmpeg',
+                        '-y',
+
+                        '-f', 'rawvideo',
+                        '-vcodec', 'rawvideo',
+                        '-pix_fmt', 'bgr24',
+                        '-s', "{}x{}".format(1304, 976),
+                        '-r', '24',
+                        '-i', '-',
+
+                        '-c:v', 'libx264',
+                        '-b:v', '1500k',
+                        '-pix_fmt', 'yuv420p',
+                        '-preset', 'ultrafast',
+                        # '-g', '20',
+                        '-threads', '0',
+                        '-bufsize', '1024k',
+                        '-f', 'flv',
+                        self.rtmpUrl]
+        self.p = sp.Popen(self.command, stdin=sp.PIPE)
 
     def getDevice(self, device_name) -> Device:
         device = super().getDevice(device_name)
@@ -67,11 +120,10 @@ class IndiClient(PyIndi.BaseClient):
     def newBLOB(self, bp):
         self.img_ctr += 1
         self.logger.info(f"img count {self.img_ctr}")
+        print(self.fps.count())
 
-        img = np.array(bp.getblobdata()).reshape((976, 1304))
-        img = Image.fromarray(img)
-        # img = Image.fromarray(cv.cvtColor(img, cv.COLOR_BAYER_BG2BGR))
-        img.save(f'frames/frame{self.img_ctr}.png')
+        save_img(bp, self.img_ctr, self.fps, self.p)
+        # multiprocessing.Process(target=save_img, args=(bp, self.img_ctr, self.fps, )).start()
 
     def newSwitch(self, svp):
         self.logger.info(f"new Switch {svp.name} for device {svp.device}")
@@ -124,5 +176,3 @@ class IndiClient(PyIndi.BaseClient):
         stream[1].s = PyIndi.ISS_ON
         self.sendNewSwitch(stream)
         print("=======stop streaming=============")
-
-
