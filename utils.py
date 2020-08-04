@@ -15,3 +15,7 @@ class FPS:
             return q_len / (self.frame_timestamps[-1] - self.frame_timestamps[0])
         else:
             return 0.0
+
+
+def exit_handler(indiclient):
+    indiclient.stop_streaming()

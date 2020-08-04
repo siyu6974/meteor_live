@@ -2,7 +2,6 @@ import PyIndi
 import time
 import sys
 import threading
-from skyfield.api import Topos, load, utc
 import datetime
 import numpy as np
 import logging
@@ -10,9 +9,12 @@ from indi_stuff import Device, IndiClient
 import io
 import configparser
 from streamer import Streamer
+import atexit
+from utils import exit_handler
 
 # logging.basicConfig(filename='logfile.log', level=logging.DEBUG)
 # logging.basicConfig(level=logging.WARN)
+
 
 config = configparser.ConfigParser()
 config.read('settings.ini')
@@ -21,6 +23,8 @@ config.read('settings.ini')
 indiclient = IndiClient(config)
 streamer = Streamer(config)
 indiclient.newFrameCB = streamer.push_frame
+atexit.register(exit_handler, indiclient=indiclient)
+
 
 while indiclient.cam is None:
     time.sleep(0.1)
