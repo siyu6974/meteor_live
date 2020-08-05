@@ -1,5 +1,4 @@
-import queue
-import threading
+from multiprocessing import Queue, Process
 import cv2 as cv
 import subprocess as sp
 import numpy as np
@@ -8,7 +7,7 @@ import time
 
 class Streamer(object):
     def __init__(self, conf):
-        self.frame_queue = queue.Queue(maxsize=30)
+        self.frame_queue = Queue(maxsize=30)
         self.rtmpUrl = f"{conf['stream']['adr']}{conf['stream']['key']}"
 
         self.command = ['ffmpeg',
@@ -34,12 +33,8 @@ class Streamer(object):
         self.p = sp.Popen(self.command, stdin=sp.PIPE)
 
     def push_frame(self, frame: np.array):
-        try:
-            frame = cv.cvtColor(frame, cv.COLOR_BAYER_BG2BGR)
-            self.frame_queue.put(frame)
-        except queue.Full:
-            self.frame_queue.get_nowait()
-            self.frame_queue.put_nowait(frame)
+        frame = cv.cvtColor(frame, cv.COLOR_BAYER_BG2BGR)
+        self.frame_queue.put(frame)
 
     def _encoder(self):
         while True:
@@ -47,10 +42,10 @@ class Streamer(object):
                 frame = self.frame_queue.get()
                 self.p.stdin.write(frame.tostring())
             else:
-                time.sleep(0.1)
+                time.sleep(0.01)
 
     def run(self):
-        th = threading.Thread(target=Streamer._encoder, args=(self, ))
-        th.setDaemon(True)
+        th = Process(target=Streamer._encoder, args=(self, ))
+        th.daemon = True
         th.start()
 
