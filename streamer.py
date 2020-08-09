@@ -8,7 +8,7 @@ from utils import FPS
 
 class Streamer(object):
     def __init__(self, conf):
-        self.frame_queue = Queue(maxsize=60)
+        self.frame_queue = Queue(maxsize=90)
         self.rtmpUrl = f"{conf['stream']['adr']}{conf['stream']['key']}"
 
         self.command = ['ffmpeg',

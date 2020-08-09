@@ -19,7 +19,6 @@ from multiprocessing import Queue, Process
 config = configparser.ConfigParser()
 config.read('settings.ini')
 
-# connect the server
 frame_queue = Queue(maxsize=60)
 
 streamer = Streamer(config)

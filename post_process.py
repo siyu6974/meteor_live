@@ -121,25 +121,30 @@ class Processor:
 
         to_discard = []
         now = time.time()
+        replay = False
         for ge_k in self.global_events:
             ge: GlobalEvent = self.global_events[ge_k]
             last_updated = ge.updated
             # trail ended
             if now - last_updated > 0.1:
+                to_discard.append(ge_k)
+
                 # exclude trails that are too short or too long
                 if 0.3 < last_updated - ge.st_t < 5:
                     if np.linalg.norm(ge.st_pos - ge.last_pos):
-                        self.newMeteor(self._buffer.getCopy(), ge.max_rect)
-                to_discard.append(ge_k)
+                        self.replay(self._buffer.getCopy(), ge.max_rect)
+                        replay = True
+                        break
+
         for k in to_discard:
             del self.global_events[k]
 
         # TODO
-        # img = cv.cvtColor(img, cv.COLOR_BAYER_BG2BGR)
-        self.toLive(img)
+        if not replay:
+            # img = cv.cvtColor(img, cv.COLOR_BAYER_BG2BGR)
+            self.toLive(img)
 
-    def newMeteor(self, buffer, roi_rect):
-        print('add')
+    def replay(self, buffer, roi_rect):
         for obj in buffer:
             img = obj['img']
             img = cv.cvtColor(img, cv.COLOR_BAYER_BG2BGR)
