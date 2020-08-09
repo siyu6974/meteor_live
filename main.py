@@ -11,6 +11,7 @@ import configparser
 from streamer import Streamer
 import atexit
 from utils import exit_handler
+from post_process import Processor
 
 # logging.basicConfig(filename='logfile.log', level=logging.DEBUG)
 # logging.basicConfig(level=logging.WARN)
@@ -22,9 +23,15 @@ config.read('settings.ini')
 # connect the server
 indiclient = IndiClient(config)
 streamer = Streamer(config)
-indiclient.newFrameCB = streamer.push_frame
-atexit.register(exit_handler, indiclient=indiclient)
+processor = Processor(config)
 
+processor.streamer = streamer
+indiclient.newFrameCB = processor.push_frame
+
+streamer.run()
+processor.run()
+
+atexit.register(exit_handler, indiclient=indiclient)
 
 while indiclient.cam is None:
     time.sleep(0.1)
@@ -34,7 +41,6 @@ indiclient.stop_streaming()
 indiclient.set_exp()
 indiclient.set_gain()
 indiclient.start_streaming()
-streamer.run()
 
 while True:
     time.sleep(1)

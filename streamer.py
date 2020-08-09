@@ -4,6 +4,7 @@ import subprocess as sp
 import numpy as np
 import time
 from utils import FPS
+from queue import Full
 
 
 class Streamer(object):
@@ -30,23 +31,27 @@ class Streamer(object):
                         '-bufsize', '1024k',
                         '-f', 'flv',
                         self.rtmpUrl]
-        # TODO:
-        # self.p = sp.Popen(self.command, stdin=sp.PIPE)
+        self.p = sp.Popen(self.command, stdin=sp.PIPE)
         self.fps = FPS()
 
     def push_frame(self, frame: np.array):
-        self.frame_queue.put(frame)
+        try:
+            self.frame_queue.put_nowait(frame)
+        except Full:
+            # discard old ones to make room for the current frame
+            self.frame_queue.get()
+            self.frame_queue.get()
+            self.frame_queue.put(frame)
 
     def _encoder(self):
         while True:
             if not self.frame_queue.empty():
                 frame = self.frame_queue.get()
-                cv.imshow('live', frame)
-                cv.waitKey(1)
+                # cv.imshow('live', frame)
+                # cv.waitKey(1)
                 self.fps.count()
                 print(self.fps.read())
-                # TODO:
-                # self.p.stdin.write(frame.tostring())
+                self.p.stdin.write(frame.tostring())
             else:
                 time.sleep(0.01)
 

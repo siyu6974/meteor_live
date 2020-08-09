@@ -19,13 +19,11 @@ from multiprocessing import Queue, Process
 config = configparser.ConfigParser()
 config.read('settings.ini')
 
-frame_queue = Queue(maxsize=60)
-
 streamer = Streamer(config)
 processor = Processor(config)
 processor.streamer = streamer
 streamer.run()
-processor.run(frame_queue)
+processor.run()
 cap = cv.VideoCapture('test.mp4')
 
 ctr = 0
@@ -37,9 +35,9 @@ while cap.isOpened():
     # cv.imshow('live', frame)
     frame = cv.resize(frame, (1304, 976))
     frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
-    frame_queue.put(frame)
+    processor.push_frame(frame)
 
-    if cv.waitKey(1) & 0xFF == ord('q'):
+    if cv.waitKey(30) & 0xFF == ord('q'):
         break
 
 

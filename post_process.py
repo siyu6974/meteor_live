@@ -1,16 +1,16 @@
-import sys
 import time
 import cv2 as cv
 import numpy as np
-import configparser
 from collections import deque
 import datetime
 from multiprocessing import Queue, Process
+from queue import Full
 
 
 class ImageBuffer:
     def __init__(self, maxlen=60):
         self._images = deque(maxlen=maxlen)
+        self.maxlen = maxlen
 
     def add(self, img, t=None):
         if t is None:
@@ -78,14 +78,15 @@ class Processor:
         self.streamer = None
         self._prev = None
 
+        self.frame_queue = Queue(maxsize=30)
+
     def process(self, img: np.array):
         if self._dark:
             img -= cv.absdiff(img, self._dark)
         self._buffer.add(img)
 
-        cur = np.float32(img)
-        # TODO:
-        # cur = cv.cvtColor(cur, cv.COLOR_BAYER_RG2GRAY)
+        # cur = np.float32(img)
+        cur = cv.cvtColor(img, cv.COLOR_BAYER_RG2GRAY)
         if self._prev is not None:
             prev = self._prev
         else:
@@ -131,7 +132,8 @@ class Processor:
 
                 # exclude trails that are too short or too long
                 if 0.3 < last_updated - ge.st_t < 5:
-                    if np.linalg.norm(ge.st_pos - ge.last_pos):
+                    # exclude stationary trails
+                    if np.linalg.norm(ge.st_pos - ge.last_pos) > 5:
                         self.replay(self._buffer.getCopy(), ge.max_rect)
                         replay = True
                         break
@@ -139,13 +141,15 @@ class Processor:
         for k in to_discard:
             del self.global_events[k]
 
-        # TODO
-        if not replay:
-            # img = cv.cvtColor(img, cv.COLOR_BAYER_BG2BGR)
+        # do not send if replay is in action
+        if not replay and self.frame_queue.qsize() < 20:
+            img = cv.cvtColor(img, cv.COLOR_BAYER_BG2BGR)
             self.toLive(img)
 
     def replay(self, buffer, roi_rect):
-        for obj in buffer:
+        # discard frames during cool down time
+        max_ctr = buffer.maxlen - 10
+        for i, obj in enumerate(buffer):
             img = obj['img']
             img = cv.cvtColor(img, cv.COLOR_BAYER_BG2BGR)
             rect = scale_rect(roi_rect, 3)
@@ -153,23 +157,34 @@ class Processor:
             cv.rectangle(img, (x, y), (x + w, y + h), (200, 127, 127), 1)
             cv.putText(img, 'Replay', (0, 50), 0, 2, (255, 255, 0), thickness=8)
             self.toLive(img)
+            if i >= max_ctr:
+                break
 
     def toLive(self, img: np.array):
         if self.streamer:
             self.streamer.push_frame(img)
 
-    def runner(self, queue):
+    def runner(self):
         while True:
-            if not queue.empty():
-                frame = queue.get()
+            if not self.frame_queue.empty():
+                frame = self.frame_queue.get()
                 self.process(frame)
             else:
                 time.sleep(0.01)
 
-    def run(self, queue):
-        th = Process(target=Processor.runner, args=(self, queue))
+    def run(self):
+        th = Process(target=Processor.runner, args=(self, ))
         th.daemon = True
         th.start()
+
+    def push_frame(self, frame: np.array):
+        try:
+            self.frame_queue.put_nowait(frame)
+        except Full:
+            # discard old ones to make room for the current frame
+            self.frame_queue.get()
+            self.frame_queue.get()
+            self.frame_queue.put(frame)
 
 
 
