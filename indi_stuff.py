@@ -37,12 +37,15 @@ class IndiClient(PyIndi.BaseClient):
         self.cam = None
         self._gain = int(config['capture']['gain'])
         self._exp = float(config['capture']['exposure'])
+        self._bin = int(config['capture']['bin'])
+        self._cooling_temp = config['capture'].get('temperature')
+        if self._cooling_temp is not None:
+            self._cooling_temp = float(self._cooling_temp )
 
-        self.img_ctr = 0
         self._img_w = int(config['capture']['size_w'])
         self._img_h = int(config['capture']['size_h'])
 
-        self.fps = FPS(30)
+        # self.fps = FPS(30)
 
         self.newFrameCB = None
 
@@ -67,10 +70,7 @@ class IndiClient(PyIndi.BaseClient):
         pass
 
     def newBLOB(self, bp):
-        self.logger.debug(f"img count {self.img_ctr}")
-        self.img_ctr += 1
-
-        self.fps.count()
+        # self.fps.count()
         img = np.array(bp.getblobdata()).reshape((self._img_h, self._img_w))
         if self.newFrameCB:
             self.newFrameCB(img)
@@ -112,6 +112,23 @@ class IndiClient(PyIndi.BaseClient):
         exp = self.cam.getNumber("STREAMING_EXPOSURE")
         exp[0].value = self._exp
         self.sendNewNumber(exp)
+
+    def set_bin(self, bin: float = None):
+        if bin is not None:
+            self._bin = bin
+        binning = self.cam.getNumber("CCD_BINNING")
+        binning[0].value = self._bin
+        binning[1].value = self._bin
+        self.sendNewNumber(binning)
+
+    def set_cooling_temp(self, temp: float = None):
+        if self._cooling_temp is None:
+            return
+        if temp is not None:
+            self._cooling_temp = temp
+        ccd_temp = self.cam.getNumber("CCD_TEMPERATURE")
+        ccd_temp[0].value = self._cooling_temp
+        self.sendNewNumber(ccd_temp)
 
     def start_streaming(self):
         stream = self.cam.getSwitch("CCD_VIDEO_STREAM")

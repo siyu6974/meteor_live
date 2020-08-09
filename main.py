@@ -38,8 +38,10 @@ while indiclient.cam is None:
 
 time.sleep(5)
 indiclient.stop_streaming()
+indiclient.set_bin()
 indiclient.set_exp()
 indiclient.set_gain()
+indiclient.set_cooling_temp()
 indiclient.start_streaming()
 
 while True:
