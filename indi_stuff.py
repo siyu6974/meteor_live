@@ -3,9 +3,7 @@ import time
 import PyIndi
 from PyIndi import INumberVectorProperty
 import numpy as np
-import cv2 as cv
 from utils import FPS
-import collections
 
 # logging.basicConfig(filename='logfile.log', level=logging.DEBUG)
 logging.basicConfig(level=logging.INFO)

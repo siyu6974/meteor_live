@@ -3,11 +3,12 @@ import cv2 as cv
 import subprocess as sp
 import numpy as np
 import time
+from utils import FPS
 
 
 class Streamer(object):
     def __init__(self, conf):
-        self.frame_queue = Queue(maxsize=30)
+        self.frame_queue = Queue(maxsize=60)
         self.rtmpUrl = f"{conf['stream']['adr']}{conf['stream']['key']}"
 
         self.command = ['ffmpeg',
@@ -29,18 +30,23 @@ class Streamer(object):
                         '-bufsize', '1024k',
                         '-f', 'flv',
                         self.rtmpUrl]
-
-        self.p = sp.Popen(self.command, stdin=sp.PIPE)
+        # TODO:
+        # self.p = sp.Popen(self.command, stdin=sp.PIPE)
+        self.fps = FPS()
 
     def push_frame(self, frame: np.array):
-        frame = cv.cvtColor(frame, cv.COLOR_BAYER_BG2BGR)
         self.frame_queue.put(frame)
 
     def _encoder(self):
         while True:
             if not self.frame_queue.empty():
                 frame = self.frame_queue.get()
-                self.p.stdin.write(frame.tostring())
+                cv.imshow('live', frame)
+                cv.waitKey(1)
+                self.fps.count()
+                print(self.fps.read())
+                # TODO:
+                # self.p.stdin.write(frame.tostring())
             else:
                 time.sleep(0.01)
 
