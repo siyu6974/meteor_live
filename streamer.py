@@ -56,7 +56,7 @@ class Streamer(object):
                 time.sleep(0.01)
 
     def run(self):
-        th = Process(target=Streamer._encoder, args=(self, ))
+        th = Process(target=self._encoder, args=())
         th.daemon = True
         th.start()
 

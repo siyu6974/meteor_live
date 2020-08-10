@@ -173,7 +173,7 @@ class Processor:
                 time.sleep(0.01)
 
     def run(self):
-        th = Process(target=Processor.runner, args=(self, ))
+        th = Process(target=self.runner, args=())
         th.daemon = True
         th.start()
 
