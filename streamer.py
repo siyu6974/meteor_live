@@ -12,8 +12,12 @@ class Streamer(object):
         self.frame_queue = Queue(maxsize=90)
         self.rtmpUrl = f"{conf['stream']['adr']}{conf['stream']['key']}"
 
+        self.audio = conf['stream']['music']
+
         self.command = ['ffmpeg',
                         '-y',
+
+                        '-i', self.audio,
 
                         '-f', 'rawvideo',
                         '-vcodec', 'rawvideo',
@@ -22,6 +26,7 @@ class Streamer(object):
                         '-r', str(1 / float(conf['capture']['exposure'])),
                         '-i', '-',
 
+                        '-c:a', 'copy',
                         '-c:v', 'libx264',
                         '-b:v', '1500k',
                         '-pix_fmt', 'yuv420p',
@@ -31,6 +36,7 @@ class Streamer(object):
                         '-bufsize', '1024k',
                         '-f', 'flv',
                         self.rtmpUrl]
+
         self.p = sp.Popen(self.command, stdin=sp.PIPE)
         self.fps = FPS()
 
