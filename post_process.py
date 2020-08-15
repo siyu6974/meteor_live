@@ -5,6 +5,7 @@ from collections import deque
 import datetime
 from multiprocessing import Queue, Process
 from queue import Full
+from threading import Thread
 
 
 class ImageBuffer:
@@ -73,6 +74,7 @@ class Processor:
         self._dark = dark
         self._threshold = 50
         self.global_events = {}
+        self._fps = 1 / float(conf['capture']['exposure'])
         self._runningAvg = np.zeros((int(conf['capture']['size_h']), int(conf['capture']['size_w'])), dtype=np.float32)
         self._replay = None
         self.streamer = None
@@ -99,7 +101,7 @@ class Processor:
         _, diff_bin = cv.threshold(diff, 20, 255, cv.THRESH_BINARY)
         self._prev = cur
 
-        cv.accumulateWeighted(diff_bin, self._runningAvg, 0.09)
+        cv.accumulateWeighted(diff_bin, self._runningAvg, 0.2)
         avg_img_int = cv.convertScaleAbs(self._runningAvg)
         _, contours, hierarchy = cv.findContours(avg_img_int, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
@@ -135,6 +137,7 @@ class Processor:
                     # exclude stationary trails
                     if np.linalg.norm(ge.st_pos - ge.last_pos) > 5:
                         self.replay(self._buffer.getCopy(), ge.max_rect)
+                        self.saveMeteor(self._buffer.getCopy())
                         replay = True
                         break
 
@@ -145,6 +148,24 @@ class Processor:
         if not replay and self.frame_queue.qsize() < 20:
             img = cv.cvtColor(img, cv.COLOR_BAYER_BG2BGR)
             self.toLive(img)
+
+    def saveMeteor(self, buf):
+        def saveMeteor(buffer):
+            size = buffer[0]['img'].shape
+            fourcc = cv.VideoWriter_fourcc('H', '2', '6', '4')
+            vw = cv.VideoWriter(f"{buffer[0]['time'].strftime('%Y-%m-%d-%H_%M_%S.%f')[:-3]}.mkv", fourcc,
+                                self._fps, size[::-1])
+
+            for i, obj in enumerate(buffer):
+                img = obj['img']
+                img = cv.cvtColor(img, cv.COLOR_BAYER_BG2BGR)
+                vw.write(img)
+            vw.release()
+            print("--------------saving DONE--------------")
+        print("--------------saving--------------")
+        th = Thread(target=saveMeteor, args=(buf,))
+        th.daemon = True
+        th.start()
 
     def replay(self, buffer, roi_rect):
         # discard frames during cool down time
@@ -173,9 +194,9 @@ class Processor:
                 time.sleep(0.01)
 
     def run(self):
-        th = Process(target=self.runner, args=())
-        th.daemon = True
-        th.start()
+        process = Process(target=self.runner, args=())
+        process.daemon = True
+        process.start()
 
     def push_frame(self, frame: np.array):
         try:

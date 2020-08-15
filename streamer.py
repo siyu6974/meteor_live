@@ -38,7 +38,7 @@ class Streamer(object):
                         self.rtmpUrl]
 
         self.p = sp.Popen(self.command, stdin=sp.PIPE)
-        self.fps = FPS()
+        # self.fps = FPS()
 
     def push_frame(self, frame: np.array):
         try:
@@ -55,8 +55,8 @@ class Streamer(object):
                 frame = self.frame_queue.get()
                 # cv.imshow('live', frame)
                 # cv.waitKey(1)
-                self.fps.count()
-                print(self.fps.read())
+                # self.fps.count()
+                # print(self.fps.read())
                 self.p.stdin.write(frame.tostring())
             else:
                 time.sleep(0.01)
