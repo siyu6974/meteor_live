@@ -1,5 +1,6 @@
 import collections
 import time
+from multiprocessing import Process
 
 
 class FPS:
@@ -17,5 +18,7 @@ class FPS:
             return 0.0
 
 
-def exit_handler(indiclient):
+def exit_handler(indiclient, processes: [Process]):
     indiclient.stop_streaming()
+    for process in processes:
+        process.terminate()

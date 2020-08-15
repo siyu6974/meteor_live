@@ -25,13 +25,16 @@ indiclient = IndiClient(config)
 streamer = Streamer(config)
 processor = Processor(config)
 
+processes = []
+
 processor.streamer = streamer
 indiclient.newFrameCB = processor.push_frame
 
 streamer.run()
-processor.run()
+processor_process = processor.run()
+processes.append(processor_process)
 
-atexit.register(exit_handler, indiclient=indiclient)
+atexit.register(exit_handler, indiclient=indiclient, processes=processes)
 
 while indiclient.cam is None:
     time.sleep(0.1)

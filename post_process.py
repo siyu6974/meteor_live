@@ -163,9 +163,9 @@ class Processor:
             vw.release()
             print("--------------saving DONE--------------")
         print("--------------saving--------------")
-        th = Thread(target=saveMeteor, args=(buf,))
-        th.daemon = True
-        th.start()
+        pro = Process(target=saveMeteor, args=(buf,))
+        pro.daemon = True
+        pro.start()
 
     def replay(self, buffer, roi_rect):
         # discard frames during cool down time
@@ -193,10 +193,10 @@ class Processor:
             else:
                 time.sleep(0.01)
 
-    def run(self):
+    def run(self) -> Process:
         process = Process(target=self.runner, args=())
-        process.daemon = True
         process.start()
+        return process
 
     def push_frame(self, frame: np.array):
         try:
