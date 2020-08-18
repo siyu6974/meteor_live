@@ -19,12 +19,10 @@ from multiprocessing import Queue, Process
 config = configparser.ConfigParser()
 config.read('settings.ini')
 
-streamer = Streamer(config)
 processor = Processor(config)
-processor.streamer = streamer
-streamer.run()
+processor.streamer = None
 processor.run()
-cap = cv.VideoCapture('test.mp4')
+cap = cv.VideoCapture('test2.mp4')
 
 ctr = 0
 

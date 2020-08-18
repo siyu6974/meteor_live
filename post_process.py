@@ -100,7 +100,6 @@ class Processor:
         diff = cv.absdiff(cur, prev)
         _, diff_bin = cv.threshold(diff, 20, 255, cv.THRESH_BINARY)
         self._prev = cur
-
         cv.accumulateWeighted(diff_bin, self._runningAvg, 0.2)
         avg_img_int = cv.convertScaleAbs(self._runningAvg)
         _, contours, hierarchy = cv.findContours(avg_img_int, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
@@ -184,6 +183,9 @@ class Processor:
     def toLive(self, img: np.array):
         if self.streamer:
             self.streamer.push_frame(img)
+        else:
+            cv.imshow('frame', img)
+            cv.waitKey(1)
 
     def runner(self):
         while True:
